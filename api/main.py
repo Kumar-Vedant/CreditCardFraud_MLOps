@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 from contextlib import asynccontextmanager
 from threading import Thread
+import time
 
 from kafka import KafkaConsumer
 import json
@@ -86,34 +87,39 @@ kafka_running = False
 
 # Kafka consumer (background thread)
 KAFKA_TOPIC = "transactions"
-KAFKA_SERVER = "localhost:9092"
+KAFKA_SERVER = "kafka:9092"
 
 def kafka_listener():
     global kafka_running
 
-    try:
-        consumer = KafkaConsumer(
-            KAFKA_TOPIC,
-            bootstrap_servers=KAFKA_SERVER,
-            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-            auto_offset_reset="latest",
-            group_id="fraud-detection-group"
-        )
+    consumer = None
 
-        kafka_running = True
-        print("Kafka connected")
+    # retry until Kafka is available
+    while consumer is None:
+        try:
+            # create Kafka consumer
+            consumer = KafkaConsumer(
+                KAFKA_TOPIC,
+                bootstrap_servers=KAFKA_SERVER,
+                value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+                auto_offset_reset="latest",
+                group_id="fraud-detection-group"
+            )
+            kafka_running = True
+            print("Kafka connected")
 
-        for message in consumer:
-            txn = message.value
-            features = txn["features"]
+        except Exception as e:
+            kafka_running = False
+            print("Kafka not ready, retrying in 2 seconds...", e)
+            time.sleep(2)
 
-            prob, is_fraud = predict_transaction(features)
+    for message in consumer:
+        txn = message.value
+        features = txn["features"]
 
-            print(f"Fraud: {is_fraud} | Prob: {prob:.4f}")
+        prob, is_fraud = predict_transaction(features)
 
-    except Exception as e:
-        kafka_running = False
-        print("Kafka error:", e)
+        print(f"Fraud: {is_fraud} | Prob: {prob:.4f}")
 
 # Kafka thread
 def start_kafka_thread():

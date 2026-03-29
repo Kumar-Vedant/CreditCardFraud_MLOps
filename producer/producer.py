@@ -2,16 +2,26 @@ import pandas as pd
 import json
 import time
 from kafka import KafkaProducer
+from kafka.errors import NoBrokersAvailable
 
 KAFKA_TOPIC = "transactions"
-KAFKA_SERVER = "localhost:9092"
+KAFKA_SERVER = "kafka:9092"
 STREAM_PATH = "data/stream.csv"
 
-# create producer
-producer = KafkaProducer(
-    bootstrap_servers=KAFKA_SERVER,
-    value_serializer=lambda v: json.dumps(v).encode("utf-8")
-)
+producer = None
+
+# retry until Kafka is available
+while producer is None:
+    try:
+        # create producer
+        producer = KafkaProducer(
+            bootstrap_servers=KAFKA_SERVER,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8")
+        )
+        print("Connected to Kafka!")
+    except NoBrokersAvailable:
+        print("Kafka not ready, retrying in 2 seconds...")
+        time.sleep(2)
 
 # load data
 df = pd.read_csv(STREAM_PATH)
