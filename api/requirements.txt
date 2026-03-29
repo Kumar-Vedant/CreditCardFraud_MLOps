@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+kafka-python
+pandas
+xgboost
+prometheus-client

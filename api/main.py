@@ -1,0 +1,121 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
+import pickle
+import numpy as np
+from contextlib import asynccontextmanager
+from threading import Thread
+
+from kafka import KafkaConsumer
+import json
+
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
+
+from pydantic import BaseModel
+from typing import List
+
+class Transaction(BaseModel):
+    features: List[float]
+
+# load model
+MODEL_PATH = "model.pkl"
+with open(MODEL_PATH, "rb") as f:
+    model = pickle.load(f)
+
+
+# metrics for Prometheus
+REQUEST_COUNT = Counter("requests_total", "Total prediction requests")
+FRAUD_COUNT = Counter("fraud_detected_total", "Total fraud detected")
+
+# internal stats
+stats = {
+    "total_processed": 0,
+    "fraud_detected": 0
+}
+
+
+# lifespan handler
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # start Kafka consumer
+    start_kafka_thread()
+
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
+
+def predict_transaction(features: list):
+    features_array = np.array(features).reshape(1, -1)
+
+    prob = model.predict_proba(features_array)[0][1]
+    is_fraud = prob > 0.5
+
+    # update metrics
+    REQUEST_COUNT.inc()
+    stats["total_processed"] += 1
+
+    if is_fraud:
+        FRAUD_COUNT.inc()
+        stats["fraud_detected"] += 1
+
+    return prob, is_fraud
+
+@app.post("/predict")
+def predict(txn: Transaction):
+    prob, is_fraud = predict_transaction(txn.features)
+
+    return {
+        "fraud_probability": float(prob),
+        "is_fraud": bool(is_fraud)
+    }
+
+@app.get("/health")
+def health():
+    return {
+        "model_loaded": model is not None,
+        "kafka_connected": kafka_running
+    }
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+kafka_running = False
+
+# Kafka consumer (background thread)
+KAFKA_TOPIC = "transactions"
+KAFKA_SERVER = "localhost:9092"
+
+def kafka_listener():
+    global kafka_running
+
+    try:
+        consumer = KafkaConsumer(
+            KAFKA_TOPIC,
+            bootstrap_servers=KAFKA_SERVER,
+            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+            auto_offset_reset="latest",
+            group_id="fraud-detection-group"
+        )
+
+        kafka_running = True
+        print("Kafka connected")
+
+        for message in consumer:
+            txn = message.value
+            features = txn["features"]
+
+            prob, is_fraud = predict_transaction(features)
+
+            print(f"Fraud: {is_fraud} | Prob: {prob:.4f}")
+
+    except Exception as e:
+        kafka_running = False
+        print("Kafka error:", e)
+
+# Kafka thread
+def start_kafka_thread():
+    thread = Thread(target=kafka_listener, daemon=True)
+    thread.start()
