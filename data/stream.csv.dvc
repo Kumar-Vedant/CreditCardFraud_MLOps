@@ -1,0 +1,5 @@
+outs:
+- md5: 9950bc4e3b124d0580e372d7270ddc05
+  size: 30224082
+  hash: md5
+  path: stream.csv
