@@ -12,11 +12,11 @@ services:
 
     command: >
       mlflow server
-      --default-artifact-root http://localhost:5000/api/2.0/mlflow-artifacts/artifacts
       --host 0.0.0.0
       --port 5000
       --serve-artifacts
       --artifacts-destination /mlruns
+      --default-artifact-root mlflow-artifacts:/
       --allowed-hosts "*"
 
     restart: always
@@ -54,6 +54,7 @@ services:
     container_name: fastapi
     depends_on:
       - kafka
+      - mlflow
     environment:
       KAFKA_SERVER: kafka:9092
     ports:

@@ -41,15 +41,16 @@ model = None
 async def lifespan(app: FastAPI):
     global model
 
-    mlflow.set_tracking_uri("http://mlflow:5000")
 
     # Ensure MLflow uses the proxy for artifact downloads
     import os
     os.environ["MLFLOW_TRACKING_URI"] = "http://mlflow:5000"
-    
+    os.environ["MLFLOW_ARTIFACT_URI"] = "http://mlflow:5000"
+    mlflow.set_tracking_uri("http://mlflow:5000")
+
     # load latest model
     from mlflow.tracking import MlflowClient
-    client = MlflowClient()
+    client = MlflowClient("http://mlflow:5000")
 
     experiment = None
     while experiment is None:
@@ -71,7 +72,13 @@ async def lifespan(app: FastAPI):
     run_id = runs[0].info.run_id
     model_uri = f"runs:/{run_id}/model"
 
-    model = mlflow.sklearn.load_model(model_uri)
+    model = None
+    while model is None:
+        try:
+            model = mlflow.sklearn.load_model(model_uri)
+        except Exception as e:
+            print(f"Model not ready, retrying in 2s... {e}")
+            time.sleep(2)
     
     # start Kafka consumer
     start_kafka_thread()
