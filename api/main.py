@@ -1,6 +1,4 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
-import pickle
 import numpy as np
 from contextlib import asynccontextmanager
 from threading import Thread
@@ -15,13 +13,16 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import List
 
+import mlflow
+import mlflow.sklearn
+
 class Transaction(BaseModel):
     features: List[float]
 
 # load model
-MODEL_PATH = "model.pkl"
-with open(MODEL_PATH, "rb") as f:
-    model = pickle.load(f)
+# MODEL_PATH = "model.pkl"
+# with open(MODEL_PATH, "rb") as f:
+#     model = pickle.load(f)
 
 
 # metrics for Prometheus
@@ -34,10 +35,40 @@ stats = {
     "fraud_detected": 0
 }
 
-
+model = None
 # lifespan handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global model
+
+    mlflow.set_tracking_uri("http://mlflow:5000")
+    
+    # load latest model
+    from mlflow.tracking import MlflowClient
+    client = MlflowClient()
+
+    experiment = None
+    while experiment is None:
+        try:
+            experiment = client.get_experiment_by_name("Default")
+        except Exception as e:
+            print("MLflow not ready, retrying in 2 seconds...", e)
+            time.sleep(2)
+            
+    runs = client.search_runs(
+        experiment_ids=[experiment.experiment_id],
+        order_by=["attributes.start_time DESC"],
+        max_results=1
+    )
+
+    if not runs:
+        raise Exception("No MLflow runs found!")
+
+    run_id = runs[0].info.run_id
+    model_uri = f"runs:/{run_id}/model"
+
+    model = mlflow.sklearn.load_model(model_uri)
+    
     # start Kafka consumer
     start_kafka_thread()
 

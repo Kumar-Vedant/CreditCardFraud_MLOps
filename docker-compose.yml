@@ -1,4 +1,25 @@
 services:
+  # mlflow
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
+
+    ports:
+      - "5000:5000"
+
+    volumes:
+      - mlflow_data:/mlruns
+
+    command: >
+      mlflow server
+      --default-artifact-root /mlruns
+      --host 0.0.0.0
+      --port 5000
+      --serve-artifacts
+      --allowed-hosts "*"
+
+    restart: always
+
   # Zookeeper
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
@@ -62,3 +83,6 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+volumes:
+  mlflow_data:

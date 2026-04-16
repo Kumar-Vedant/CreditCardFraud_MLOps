@@ -15,14 +15,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
       - name: Pull data
         run: dvc pull
 
-      - name: Stop existing containers
-        run: docker compose down
+      - name: Train model
+        run: python3 train.py
 
       - name: Build and start containers
-        run: docker compose up -d --build
+        run: docker compose up -d --build --no-cache
 
       - name: Cleanup unused images
         run: docker image prune -f

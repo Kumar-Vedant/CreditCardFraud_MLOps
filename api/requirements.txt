@@ -4,3 +4,4 @@ kafka-python
 pandas
 xgboost
 prometheus-client
+mlflow>=2.9.0
