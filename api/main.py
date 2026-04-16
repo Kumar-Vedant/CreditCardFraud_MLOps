@@ -42,6 +42,10 @@ async def lifespan(app: FastAPI):
     global model
 
     mlflow.set_tracking_uri("http://mlflow:5000")
+
+    # Ensure MLflow uses the proxy for artifact downloads
+    import os
+    os.environ["MLFLOW_TRACKING_URI"] = "http://mlflow:5000"
     
     # load latest model
     from mlflow.tracking import MlflowClient
@@ -54,7 +58,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print("MLflow not ready, retrying in 2 seconds...", e)
             time.sleep(2)
-            
+
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
         order_by=["attributes.start_time DESC"],
