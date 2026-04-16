@@ -30,6 +30,7 @@ jobs:
       - name: Train model
         env:
           MLFLOW_TRACKING_URI: http://localhost:5000
+          MLFLOW_ARTIFACT_URI: ./mlruns
         run: python3 train.py
 
       - name: Build and start containers
