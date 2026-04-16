@@ -21,6 +21,12 @@ jobs:
       - name: Pull data
         run: dvc pull
 
+      - name: Start MLflow
+        run: docker compose up -d mlflow
+
+      - name: Wait for MLflow
+        run: sleep 5
+
       - name: Train model
         run: python3 train.py
 

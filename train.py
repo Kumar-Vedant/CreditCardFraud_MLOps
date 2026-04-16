@@ -14,7 +14,7 @@ y = df["Class"]
 
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
 
-mlflow.set_tracking_uri("http://mlflow:5000")
+mlflow.set_tracking_uri("http://localhost:5000")
 with mlflow.start_run():
     # handle class imbalance (scale_pos_weight = #non-fraud/#fraud)
     scale_pos_weight = (len(y_train) - sum(y_train)) / sum(y_train)
