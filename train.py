@@ -3,6 +3,8 @@ import pickle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from xgboost import XGBClassifier
+
+from sklearn import svm
 import mlflow
 import mlflow.sklearn
 
@@ -20,15 +22,16 @@ with mlflow.start_run():
     scale_pos_weight = (len(y_train) - sum(y_train)) / sum(y_train)
 
     # train model
-    model = XGBClassifier(
-        n_estimators=200,
-        max_depth=5,
-        learning_rate=0.1,
-        scale_pos_weight=scale_pos_weight,
-        use_label_encoder=False,
-        eval_metric="logloss",
-        random_state=42
-    )
+    # model = XGBClassifier(
+    #     n_estimators=200,
+    #     max_depth=5,
+    #     learning_rate=0.1,
+    #     scale_pos_weight=scale_pos_weight,
+    #     use_label_encoder=False,
+    #     eval_metric="logloss",
+    #     random_state=42
+    # )
+    model = svm.SVC(kernel='rbf', class_weight='balanced', probability=True, random_state=42)
     model.fit(X_train, y_train)
 
     # evaluate
