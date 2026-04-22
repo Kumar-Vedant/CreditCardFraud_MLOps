@@ -59,6 +59,8 @@ services:
       KAFKA_SERVER: kafka:9092
     ports:
       - "8000:8000"
+    volumes:
+      - ./data:/app/data
 
   # producer container
   producer:
