@@ -17,8 +17,8 @@ from typing import List
 import mlflow
 import mlflow.sklearn
 
-from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset
+from evidently import Report
+from evidently.metrics import DataDriftPreset
 
 from collections import deque
 from threading import Lock
