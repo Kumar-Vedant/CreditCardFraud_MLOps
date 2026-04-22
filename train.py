@@ -5,6 +5,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from xgboost import XGBClassifier
 
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn import svm
 import mlflow
 import mlflow.sklearn
@@ -33,7 +34,8 @@ with mlflow.start_run():
     #     random_state=42
     # )
     # model = svm.SVC(kernel='rbf', class_weight='balanced', probability=True, random_state=42)
-    model = LogisticRegression(class_weight='balanced', random_state=42)
+    # model = LogisticRegression(class_weight='balanced', random_state=42)
+    model = RandomForestClassifier(n_estimators=200, max_depth=5, class_weight='balanced', random_state=42)
     model.fit(X_train, y_train)
 
     # evaluate
@@ -46,13 +48,12 @@ with mlflow.start_run():
     roc_auc = roc_auc_score(y_val, model.predict_proba(X_val)[:,1])
 
     # log model parameters to MLFlow
-    # mlflow.log_param("n_estimators", 200)
-    # mlflow.log_param("max_depth", 5)
+    mlflow.log_param("n_estimators", 200)
+    mlflow.log_param("max_depth", 5)
     # mlflow.log_param("learning_rate", 0.1)
     # mlflow.log_param("scale_pos_weight", scale_pos_weight)
     # mlflow.log_param("eval_metric", "logloss")
-    # mlflow.log_param("random_state", 42)
-    # mlflow.log_param("kernel", "rbf")
+    mlflow.log_param("kernel", "rbf")
     mlflow.log_param("random_state", 42)
 
     # log data parameters to MLFlow
@@ -69,10 +70,10 @@ with mlflow.start_run():
     mlflow.log_metric("roc_auc", roc_auc)
 
     # log model to MLFlow
-    mlflow.sklearn.log_model(model, "model")
+    mlflow.sklearn.log_model(model, "random_forest")
 
     # save model
-    with open("api/model.pkl", "wb") as f:
-        pickle.dump(model, f)
+    # with open("api/model.pkl", "wb") as f:
+    #     pickle.dump(model, f)
 
 print("Model trained and saved!")

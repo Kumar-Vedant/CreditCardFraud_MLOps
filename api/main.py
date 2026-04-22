@@ -3,11 +3,12 @@ import numpy as np
 from contextlib import asynccontextmanager
 from threading import Thread
 import time
+import pandas as pd
 
 from kafka import KafkaConsumer
 import json
 
-from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import Response
 
 from pydantic import BaseModel
@@ -15,6 +16,19 @@ from typing import List
 
 import mlflow
 import mlflow.sklearn
+
+from evidently.report import Report
+from evidently.metric_preset import DataDriftPreset
+
+from collections import deque
+from threading import Lock
+
+reference_data = None
+DRIFT_WINDOW_SIZE = 200
+DRIFT_CHECK_INTERVAL = 50
+stream_buffer = deque(maxlen=DRIFT_WINDOW_SIZE)
+buffer_lock = Lock()
+transactions_since_last_check = 0
 
 class Transaction(BaseModel):
     features: List[float]
@@ -29,18 +43,16 @@ class Transaction(BaseModel):
 REQUEST_COUNT = Counter("requests_total", "Total prediction requests")
 FRAUD_COUNT = Counter("fraud_detected_total", "Total fraud detected")
 
-# internal stats
-stats = {
-    "total_processed": 0,
-    "fraud_detected": 0
-}
+DRIFT_DETECTED = Gauge("data_drift_detected", "Whether data drift was detected (1/0)")
+DRIFT_SHARE = Gauge("data_drift_column_share", "Share of drifted columns")
 
 model = None
 # lifespan handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global model
+    global model, reference_data
 
+    reference_data = pd.read_csv("data/train.csv").drop(columns=["Class"])
 
     # Ensure MLflow uses the proxy for artifact downloads
     import os
@@ -96,13 +108,29 @@ def predict_transaction(features: list):
 
     # update metrics
     REQUEST_COUNT.inc()
-    stats["total_processed"] += 1
 
     if is_fraud:
         FRAUD_COUNT.inc()
-        stats["fraud_detected"] += 1
 
     return prob, is_fraud
+
+def check_drift():
+    with buffer_lock:
+        if len(stream_buffer) < DRIFT_WINDOW_SIZE:
+            return
+        current_data = pd.DataFrame(list(stream_buffer), columns=reference_data.columns)
+
+    report = Report(metrics=[DataDriftPreset()])
+    report.run(reference_data=reference_data, current_data=current_data)
+
+    result = report.as_dict()
+    drift_detected = result["metrics"][0]["result"]["dataset_drift"]
+    drift_share = result["metrics"][0]["result"]["share_of_drifted_columns"]
+
+    DRIFT_DETECTED.set(int(drift_detected))
+    DRIFT_SHARE.set(drift_share)
+    print(f"Drift detected: {drift_detected} | Drifted columns: {drift_share:.2%}")
+
 
 @app.post("/predict")
 def predict(txn: Transaction):
@@ -156,11 +184,20 @@ def kafka_listener():
             time.sleep(2)
 
     for message in consumer:
+        global transactions_since_last_check
+
         txn = message.value
         features = txn["features"]
 
-        prob, is_fraud = predict_transaction(features)
+        with buffer_lock:
+            stream_buffer.append(features)
 
+        transactions_since_last_check += 1
+        if transactions_since_last_check >= DRIFT_CHECK_INTERVAL:
+            transactions_since_last_check = 0
+            check_drift()
+
+        prob, is_fraud = predict_transaction(features)
         print(f"Fraud: {is_fraud} | Prob: {prob:.4f}")
 
 # Kafka thread
